@@ -1,0 +1,12 @@
+version = 0.1
+[default.deploy.parameters]
+stack_name = "real-time-chat-demo"
+resolve_s3 = true
+s3_prefix = "real-time-chat-demo"
+region = "us-east-1"
+profile = "gutkedu-terraform"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
+disable_rollback = false
+parameter_overrides = "Env=\"dev\""
+image_repositories = []

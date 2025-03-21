@@ -1,0 +1,155 @@
+{
+  "Comment": "WebSocket Message Distribution Workflow",
+  "StartAt": "FetchConnections",
+  "States": {
+    "FetchConnections": {
+      "Type": "Task",
+      "Parameters": {
+        "TableName": "RealTimeChatTable",
+        "KeyConditionExpression": "pk = :pk",
+        "ExpressionAttributeValues": {
+          ":pk": {
+            "S": "CONNECTION"
+          }
+        }
+      },
+      "Resource": "arn:aws:states:::aws-sdk:dynamodb:query",
+      "ResultPath": "$.fetchConnections",
+      "Next": "ProcessConnections"
+    },
+    "ProcessConnections": {
+      "Type": "Map",
+      "ItemsPath": "$.fetchConnections.Items",
+      "Parameters": {
+        "connectionItem.$": "$$.Map.Item.Value",
+        "eventData.$": "$",
+        "connectionId.$": "$$.Map.Item.Value.id.S"
+      },
+      "ItemProcessor": {
+        "ProcessorConfig": {
+          "Mode": "INLINE"
+        },
+        "StartAt": "PrepareMessagePayload",
+        "States": {
+          "PrepareMessagePayload": {
+            "Type": "Choice",
+            "Choices": [
+              {
+                "Variable": "$.eventData.detail-type",
+                "StringEquals": "CONNECTION_ESTABLISHED",
+                "Next": "PrepareConnectionEstablishedMessage"
+              },
+              {
+                "Variable": "$.eventData.detail-type",
+                "StringEquals": "CONNECTION_CLOSED",
+                "Next": "PrepareConnectionClosedMessage"
+              },
+              {
+                "Variable": "$.eventData.detail-type",
+                "StringEquals": "MESSAGE_SENT",
+                "Next": "PrepareNewMessagePayload"
+              }
+            ],
+            "Default": "EndMapState"
+          },
+          "PrepareConnectionEstablishedMessage": {
+            "Type": "Pass",
+            "Parameters": {
+              "operation": "CONNECTION_ESTABLISHED",
+              "connectionId.$": "$.connectionId",
+              "messagePayload": {
+                "action.$": "$.eventData.detail.action",
+                "content.$": "States.Format('User {} has joined the chat', $.eventData.detail.sender)",
+                "sender": "System",
+                "timestamp.$": "$.eventData.detail.timestamp"
+              }
+            },
+            "Next": "SendMessage",
+            "ResultPath": "$.prepareMessagePayload"
+          },
+          "PrepareConnectionClosedMessage": {
+            "Type": "Pass",
+            "Parameters": {
+              "operation": "CONNECTION_CLOSED",
+              "connectionId.$": "$.connectionId",
+              "sourceConnectionId.$": "$.eventData.detail.connectionId",
+              "messagePayload": {
+                "action.$": "$.eventData.detail.action",
+                "content.$": "States.Format('User {} has left the chat', $.eventData.detail.sender)",
+                "sender": "System",
+                "timestamp.$": "$.eventData.detail.timestamp"
+              }
+            },
+            "Next": "SendMessage",
+            "ResultPath": "$.prepareMessagePayload"
+          },
+          "PrepareNewMessagePayload": {
+            "Type": "Pass",
+            "Parameters": {
+              "operation": "MESSAGE_SENT",
+              "connectionId.$": "$.connectionId",
+              "sourceConnectionId.$": "$.eventData.detail.connectionId",
+              "messagePayload": {
+                "action.$": "$.eventData.detail.action",
+                "content.$": "$.eventData.detail.content",
+                "sender.$": "$.eventData.detail.sender",
+                "timestamp.$": "$.eventData.detail.timestamp"
+              }
+            },
+            "Next": "FilterSameClientId",
+            "ResultPath": "$.prepareMessagePayload"
+          },
+          "FilterSameClientId": {
+            "Type": "Choice",
+            "Choices": [
+              {
+                "Next": "EndMapState",
+                "And": [
+                  {
+                    "Variable": "$.eventData.detail.clientId",
+                    "IsPresent": true
+                  },
+                  {
+                    "Variable": "$.connectionItem.clientId.S",
+                    "IsPresent": true
+                  },
+                  {
+                    "Variable": "$.eventData.detail.clientId",
+                    "StringEqualsPath": "$.connectionItem.clientId.S"
+                  }
+                ]
+              }
+            ],
+            "Default": "SendMessage"
+          },
+          "EndMapState": {
+            "Type": "Pass",
+            "Parameters": {
+              "message": "Map iteration completed",
+              "connectionId.$": "$.connectionId",
+              "status": "completed"
+            },
+            "ResultPath": "$.mapResult",
+            "End": true
+          },
+          "SendMessage": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::aws-sdk:kinesis:putRecord",
+            "Parameters": {
+              "StreamName": "${BroadcastMessageStreamName}",
+              "Data": {
+                "connectionId.$": "$.prepareMessagePayload.connectionId",
+                "message.$": "$.prepareMessagePayload.messagePayload"
+              },
+              "PartitionKey.$": "$.connectionId"
+            },
+            "ResultPath": "$.kinesisResult",
+            "End": true
+          }
+        }
+      },
+      "End": true,
+      "MaxConcurrency": 10
+    }
+  }
+}

@@ -1,0 +1,145 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: |
+  Shared resources for the RealTimeChat application.
+
+Parameters:
+  Env:
+    Type: String
+    AllowedValues:
+      - dev
+      - prd
+    Description: Environment in which the frontend will be deployed.
+    Default: dev
+  
+  BucketName:
+    Type: String
+    Description: Name of the S3 bucket for frontend assets.
+    Default: real-time-chat-frontend-bucket
+
+Resources:
+
+  ##########################################################################
+  #                       Event bridge Bus                                 #
+  ##########################################################################
+  EventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: ChatEventBus
+      Tags:
+        - Key: Environment
+          Value: !Ref Env
+  
+##########################################################################
+#                 EventBridge Rule for Logging All Events                #
+##########################################################################
+  AllEventsLogRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "AllEventsToCloudWatch-${Env}"
+      Description: "Captures all events and sends them to CloudWatch Logs"
+      EventBusName: !Ref EventBus
+      EventPattern:
+        account:
+          - !Ref AWS::AccountId
+      State: ENABLED
+      Targets:
+        - Arn: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/events/logs-event-bus-${Env}:*"
+          Id: AllEventsLogGroup
+
+    # Create the log group for events
+  AllEventsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/events/logs-event-bus-${Env}"
+      RetentionInDays: 30
+
+  # Role that allows EventBridge to write to CloudWatch Logs
+  EventsLogGroupRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: PutEventsToCloudWatchLogs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: 
+                  - !GetAtt AllEventsLogGroup.Arn
+                  - !Sub "${AllEventsLogGroup.Arn}:*"
+
+
+  ##########################################################################
+  #                       S3 Bucket for frontend                           #
+  ##########################################################################
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${BucketName}-${Env}"
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - GET
+              - HEAD
+            AllowedOrigins:
+              - "*"
+            MaxAge: 3000
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: ObjectWriter
+      Tags:
+        - Key: Environment
+          Value: !Ref Env
+          
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Sub 'arn:aws:s3:::${FrontendBucket}/*'
+
+Outputs:
+  BucketName:
+    Description: Name of the S3 bucket hosting the frontend
+    Value: !Ref FrontendBucket
+  
+  WebsiteURL:
+    Description: URL of the S3 website endpoint
+    Value: !GetAtt FrontendBucket.WebsiteURL
+  
+  S3WebsiteURL:
+    Description: S3 website URL format
+    Value: !Sub "http://${FrontendBucket}.s3-website-${AWS::Region}.amazonaws.com"
+  
+  S3WebsiteBucketName:
+    Description: Name of the S3 bucket hosting the frontend
+    Value: !Ref FrontendBucket
+  
+  EventBusName:
+    Description: Name of the EventBridge bus
+    Value: !Ref EventBus

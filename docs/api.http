@@ -1,0 +1,5 @@
+@baseUrl = https://b5nevg72lc.execute-api.us-east-1.amazonaws.com/dev/
+
+### Last messages
+GET {{baseUrl}}/chat/last-messages
+Content-Type: application/json

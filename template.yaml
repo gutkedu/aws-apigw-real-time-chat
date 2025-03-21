@@ -1,0 +1,82 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: |
+  AWS Serverless Application Model (AWS SAM) template.
+
+Parameters:
+  Env:
+    Type: String
+    AllowedValues:
+      - dev
+      - prd
+    Description: Environment in which the application will be deployed.
+    Default: dev
+
+Resources:
+  ##########################################################################
+  #                              Database                                  #
+  ##########################################################################
+  DynamoDB:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: db/template.yaml
+      Parameters:
+        Env: !Ref Env
+
+  ##########################################################################
+  #                          Shared resources                              #
+  ##########################################################################
+  SharedResources:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: shared/template.yaml
+      Parameters:
+        Env: !Ref Env
+
+  ##########################################################################
+  #                              API Application                           #
+  ##########################################################################
+  Api:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: api/template.yaml
+      Parameters:
+        Env: !Ref Env
+        TableName: !GetAtt DynamoDB.Outputs.TableName
+        EventBusName: !GetAtt SharedResources.Outputs.EventBusName
+
+  ##########################################################################
+  #                              Workflows                                 #
+  ##########################################################################
+  Workflows:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: workflows/template.yaml
+      Parameters:
+        Env: !Ref Env
+        TableName: !GetAtt DynamoDB.Outputs.TableName
+        EventBusName: !GetAtt SharedResources.Outputs.EventBusName
+        WebSocketHttpApiUrl: !GetAtt Api.Outputs.WebSocketHttpApiUrl
+  ##########################################################################
+  #                              Outputs                                   #
+  ##########################################################################
+Outputs:
+  ApiUrl:
+    Value: !GetAtt Api.Outputs.ApiUrl
+    Description: The URL of the API Gateway endpoint.
+
+  WebSocketApiUrl:
+    Value: !GetAtt Api.Outputs.WebSocketApiUrl
+    Description: The URL of the WebSocket API endpoint.
+
+  WebSocketHttpApiUrl:
+    Value: !GetAtt Api.Outputs.WebSocketHttpApiUrl
+    Description: The URL of the WebSocket HTTP API endpoint.
+
+  FrontendUrl:
+    Value: !GetAtt SharedResources.Outputs.S3WebsiteURL
+    Description: The URL of the frontend application.
+
+  FrontendBucketName:
+    Value: !GetAtt SharedResources.Outputs.S3WebsiteBucketName
+    Description: The name of the frontend S3 bucket.

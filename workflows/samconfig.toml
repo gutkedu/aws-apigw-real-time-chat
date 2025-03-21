@@ -1,0 +1,12 @@
+version = 0.1
+[default.deploy.parameters]
+stack_name = "workflows"
+resolve_s3 = true
+s3_prefix = "workflows"
+region = "us-east-1"
+profile = "gutkedu-terraform"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
+disable_rollback = true
+parameter_overrides = "Env=\"dev\" Stage=\"dev\" EventBusName=\"ChatEventBus-dev\" WebSocketApiUrl=\"wss://your-api-id.execute-api.us-east-1.amazonaws.com/dev\" TableName=\"RealTimeChatTable-dev\""
+image_repositories = []

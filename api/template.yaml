@@ -1,0 +1,252 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: |
+  API Gateway and Lambda functions for the RealTimeChat application.
+
+Globals:
+  Function:
+    Timeout: 5
+    MemorySize: 512
+    CodeUri: .
+    Architectures:
+      - x86_64
+    Runtime: nodejs22.x
+    Environment:
+      Variables:
+        ENV: !Ref Env
+        NODE_OPTIONS: '--enable-source-maps'
+        TABLE_NAME: !Ref TableName
+        EVENT_BUS_NAME: !Ref EventBusName
+        WEBSOCKET_ENDPOINT: !Sub ${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Env}
+
+Parameters:
+  TableName:
+    Type: String
+    Description: The name of dynamo database
+
+  Env:
+    Type: String
+    Description: The environment name
+    Default: dev
+
+  EventBusName:
+    Type: String
+    Description: The name of the event bus
+
+Resources:
+  ##########################################################################
+  #                              Layers                                    #
+  ##########################################################################
+  NodejsDepsLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub NodejsDeps-${Env}
+      Description: Dependencies for the Nodejs Lambda functions
+      ContentUri: ./layers/nodejs-deps
+      CompatibleRuntimes:
+        - nodejs22.x
+        - nodejs20.x
+        - nodejs18.x
+    Metadata:
+      BuildMethod: nodejs22.x
+      BuildArchitecture: x86_64
+
+  ##########################################################################
+  #   REST API                                                             #
+  ##########################################################################
+  ApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref Env
+      Cors:
+        AllowMethods: "'GET,POST,OPTIONS'" 
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Requested-With'"
+        AllowOrigin: "'*'"
+      Variables:
+        ENV: !Ref Env
+
+  ##########################################################################
+  #   WebSocket API                                                        #
+  ##########################################################################
+  WebSocketApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub ChatWebSocketApi-${Env}
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: $request.body.action
+
+  WebSocketStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref WebSocketApi
+      StageName: !Ref Env
+      Description: !Sub WebSocket ${Env} stage
+      DeploymentId: !Ref Deployment
+
+  Deployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    DependsOn:
+      - ConnectRoute
+      - DisconnectRoute
+      - DefaultRoute
+      - SendMessageRoute
+    Properties:
+      ApiId: !Ref WebSocketApi
+
+  WsApiFunctionIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WsApiFunction.Arn}/invocations
+
+  ConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: $connect
+      AuthorizationType: NONE
+      OperationName: ConnectRoute
+      Target: !Sub integrations/${WsApiFunctionIntegration}
+
+  DisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: $disconnect
+      AuthorizationType: NONE
+      OperationName: DisconnectRoute
+      Target: !Sub integrations/${WsApiFunctionIntegration}
+
+  DefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: $default
+      AuthorizationType: NONE
+      OperationName: DefaultRoute
+      Target: !Sub integrations/${WsApiFunctionIntegration}
+
+  SendMessageRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: sendMessage
+      AuthorizationType: NONE
+      OperationName: SendMessageRoute
+      Target: !Sub integrations/${WsApiFunctionIntegration}
+
+  ReceiveMessageRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: receiveMessage
+      AuthorizationType: NONE
+      OperationName: ReceiveMessageRoute
+      Target: !Sub integrations/${WsApiFunctionIntegration}
+
+  SystemMessageRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: systemMessage
+      AuthorizationType: NONE
+      OperationName: SystemMessageRoute
+      Target: !Sub integrations/${WsApiFunctionIntegration}
+
+  ##########################################################################
+  #   Lambda Functions                                                     #
+  ##########################################################################
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ApiFunction
+      Description: Lambda function for handling API Gateway requests
+      Handler: api-handler.apiHandler
+      Layers:
+        - !Ref NodejsDepsLayer
+        - !Sub arn:aws:lambda:${AWS::Region}:094274105915:layer:AWSLambdaPowertoolsTypeScriptV2:17
+      Events:
+        LastMessages:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /chat/last-messages
+            Method: GET
+      Policies:
+        - AWSLambdaExecute
+        - DynamoDBReadPolicy:
+            TableName: !Ref TableName
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - src/lambdas/api-handler.ts
+        External:
+          - fastify
+          - '@fastify/aws-lambda'
+          - '@fastify/cors'
+          - ksuid
+          - zod
+          - '@aws-lambda-powertools/logger'
+          - '@aws-sdk/client-dynamodb'
+          - '@aws-sdk/lib-dynamodb'
+
+  WsApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: WsApiFunction
+      Description: Lambda function for handling WebSocket connections
+      Handler: ws-api-handler.wsApiHandler
+      Layers:
+        - !Ref NodejsDepsLayer
+        - !Sub arn:aws:lambda:${AWS::Region}:094274105915:layer:AWSLambdaPowertoolsTypeScriptV2:17
+      Policies:
+        - AWSLambdaExecute
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TableName
+        - EventBridgePutEventsPolicy:
+            EventBusName: !Ref EventBusName
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - src/lambdas/ws-api-handler.ts
+        External:
+          - '@aws-lambda-powertools/logger'
+          - '@aws-sdk/client-dynamodb'
+          - '@aws-sdk/lib-dynamodb'
+          - '@aws-sdk/client-eventbridge'
+          - zod
+          - ksuid
+
+  # Permissions for API Gateway to invoke WebSocket Lambda
+  WsApiFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt WsApiFunction.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+
+##########################################################################
+#   Outputs                                                              #
+##########################################################################
+Outputs:
+  ApiUrl:
+    Description: HTTP API endpoint
+    Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Env}/
+
+  WebSocketApiUrl:
+    Description: WebSocket API endpoint
+    Value: !Sub wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Env}
+
+  WebSocketHttpApiUrl:
+    Description: WebSocket HTTP API endpoint
+    Value: !Sub https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Env}

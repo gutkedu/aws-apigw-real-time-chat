@@ -1,0 +1,156 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: |
+  Workflows for the RealTimeChat application.
+
+Globals:
+  Function:
+    Timeout: 5
+    MemorySize: 512
+    CodeUri: .
+    Architectures:
+      - x86_64
+    Runtime: nodejs22.x
+    Environment:
+      Variables:
+        ENV: !Ref Env
+        NODE_OPTIONS: '--enable-source-maps'
+        WEBSOCKET_HTTP_API_ENDPOINT: !Ref WebSocketHttpApiUrl
+
+Parameters:
+  Env:
+    Type: String
+    AllowedValues:
+      - dev
+      - prd
+    Description: Environment in which the workflows will be deployed.
+    Default: dev
+
+  WebSocketHttpApiUrl:
+    Type: String
+    Description: The URL of the WebSocket API
+
+  TableName:
+    Type: String
+    Description: The name of dynamo database
+
+  EventBusName:
+    Type: String
+    Description: The name of the event bus
+
+Resources:
+  ##########################################################################
+  #                              Logs                                      #
+  ##########################################################################
+  Logs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  ##########################################################################
+  #                            Workflows                                   #
+  ##########################################################################
+  MessageDistributionWorkflow:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: WebSocketMessageDistribution
+      Type: EXPRESS
+      Events:
+        ChatEventBus:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: !Ref EventBusName
+            Pattern:
+              source:
+                - chat.service
+              detail-type:
+                - CONNECTION_ESTABLISHED
+                - CONNECTION_CLOSED
+                - MESSAGE_SENT
+      DefinitionUri: ./statemachine/message-distribution.asl.json
+      DefinitionSubstitutions:
+        TableName: !Ref TableName
+        BroadcastMessageStreamName: !Ref BroadcastMessageStream
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TableName
+        - KinesisCrudPolicy:
+            StreamName: !Ref BroadcastMessageStream
+        - CloudWatchLogsFullAccess
+      Logging:
+        Destinations:
+          - CloudWatchLogsLogGroup:
+              LogGroupArn: !GetAtt Logs.Arn
+        IncludeExecutionData: true
+        Level: ALL
+      Tags:
+        Environment: !Ref Env
+
+  ##########################################################################
+  #                          Lambda                                        #
+  ##########################################################################
+  BroadcastMessageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: broadcast-message-handler.broadcastMessageHandler
+      FunctionName: BroadcastMessageFunction
+      Events:
+        Stream:
+          Type: Kinesis
+          Properties:
+            Stream: !GetAtt BroadcastMessageStream.Arn
+            StartingPosition: LATEST
+            BatchSize: 100
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+      Policies:
+        - AWSLambdaExecute
+        - Statement:
+          - Effect: Allow
+            Action:
+              - 'execute-api:ManageConnections'
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*/@connections/*'
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:094274105915:layer:AWSLambdaPowertoolsTypeScriptV2:17
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - src/lambdas/broadcast-message-handler.ts
+        External:
+          - '@aws-lambda-powertools/logger'
+          - "@aws-sdk/client-apigatewaymanagementapi"
+          - "@aws-lambda-powertools/batch"
+
+##########################################################################
+#                          Kinesis                                       #
+##########################################################################
+  BroadcastMessageStream:
+    Type: AWS::Kinesis::Stream
+    Properties:
+      Name: BroadcastMessageStream
+      RetentionPeriodHours: 24
+      ShardCount: 1 
+
+  ##########################################################################
+  #                          Outputs                                       #
+  ##########################################################################
+Outputs:
+  MessageDistributionWorkflowArn:
+    Description: ARN of the Message Distribution State Machine
+    Value: !GetAtt MessageDistributionWorkflow.Arn
+
+  MessageDistributionWorkflowName:
+    Description: Name of the Message Distribution State Machine
+    Value: !GetAtt MessageDistributionWorkflow.Name
+
+  BroadcastMessageFunctionArn:
+    Description: ARN of the Broadcast Message Lambda Function
+    Value: !GetAtt BroadcastMessageFunction.Arn
+  
+  BroadcastMessageStreamName:
+    Description: Name of the Broadcast Message Kinesis Stream
+    Value: !Ref BroadcastMessageStream
