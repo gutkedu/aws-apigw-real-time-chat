@@ -134,16 +134,14 @@
           },
           "SendMessage": {
             "Type": "Task",
-            "Resource": "arn:aws:states:::aws-sdk:kinesis:putRecord",
+            "Resource": "arn:aws:states:::sqs:sendMessage",
             "Parameters": {
-              "StreamName": "${BroadcastMessageStreamName}",
-              "Data": {
-                "connectionId.$": "$.prepareMessagePayload.connectionId",
-                "message.$": "$.prepareMessagePayload.messagePayload"
-              },
-              "PartitionKey.$": "$.connectionId"
+              "QueueUrl": "${BroadcastMessageQueueUrl}",
+              "MessageBody": {
+                "message.$": "$.prepareMessagePayload.messagePayload",
+                "connectionId.$": "$.prepareMessagePayload.connectionId"
+              }
             },
-            "ResultPath": "$.kinesisResult",
             "End": true
           }
         }

@@ -2,11 +2,11 @@ import { PostToConnectionCommand } from '@aws-sdk/client-apigatewaymanagementapi
 import { getLogger } from '../shared/get-logger'
 import { BatchProcessor, EventType, processPartialResponse } from '@aws-lambda-powertools/batch'
 import { apiGatewayManagementApi } from '../aws-clients/api-gateway-management'
-import type { KinesisStreamHandler, KinesisStreamRecord } from 'aws-lambda'
+import type { SQSRecord, SQSHandler } from 'aws-lambda'
 
 const logger = getLogger()
 const client = apiGatewayManagementApi()
-const processor = new BatchProcessor(EventType.KinesisDataStreams)
+const processor = new BatchProcessor(EventType.SQS)
 
 interface MessagePayload {
   connectionId: string
@@ -18,20 +18,20 @@ interface MessagePayload {
   }
 }
 
-const recordHandler = async (record: KinesisStreamRecord): Promise<void> => {
-  logger.info(`Processing record of sequenceNumber: ${record.kinesis.sequenceNumber}`, {
-    record
+const recordHandler = async (record: SQSRecord): Promise<void> => {
+  logger.info('Processing SQS message', {
+    messageId: record.messageId
   })
 
-  const data = Buffer.from(record.kinesis.data, 'base64').toString()
+  const body = record.body
 
-  if (!data) {
-    logger.error('Empty payload received')
+  if (!body) {
+    logger.error('Empty message body received')
     return
   }
 
   try {
-    const item: MessagePayload = JSON.parse(data)
+    const item: MessagePayload = JSON.parse(body)
 
     const { connectionId, message } = item
 
@@ -61,18 +61,17 @@ const recordHandler = async (record: KinesisStreamRecord): Promise<void> => {
       throw error
     }
   } catch (error) {
-    logger.error('Failed to process record', {
+    logger.error('Failed to process message', {
       error,
-      data,
-      partitionKey: record.kinesis.partitionKey,
-      sequenceNumber: record.kinesis.sequenceNumber
+      body,
+      messageId: record.messageId
     })
     // Rethrow to mark this individual record as failed
     throw error
   }
 }
 
-export const broadcastMessageHandler: KinesisStreamHandler = async (event, context) => {
+export const broadcastMessageHandler: SQSHandler = async (event, context) => {
   logger.info(`Batch size: ${event?.Records.length || 0}`)
   return processPartialResponse(event, recordHandler, processor, { context })
 }

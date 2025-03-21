@@ -70,12 +70,12 @@ Resources:
       DefinitionUri: ./statemachine/message-distribution.asl.json
       DefinitionSubstitutions:
         TableName: !Ref TableName
-        BroadcastMessageStreamName: !Ref BroadcastMessageStream
+        BroadcastMessageQueueUrl: !GetAtt BroadcastMessageQueue.QueueUrl
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref TableName
-        - KinesisCrudPolicy:
-            StreamName: !Ref BroadcastMessageStream
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt BroadcastMessageQueue.QueueName
         - CloudWatchLogsFullAccess
       Logging:
         Destinations:
@@ -95,12 +95,12 @@ Resources:
       Handler: broadcast-message-handler.broadcastMessageHandler
       FunctionName: BroadcastMessageFunction
       Events:
-        Stream:
-          Type: Kinesis
+        Queue:
+          Type: SQS
           Properties:
-            Stream: !GetAtt BroadcastMessageStream.Arn
-            StartingPosition: LATEST
-            BatchSize: 100
+            Queue: !GetAtt BroadcastMessageQueue.Arn
+            BatchSize: 10
+            MaximumBatchingWindowInSeconds: 1 
             FunctionResponseTypes:
               - ReportBatchItemFailures
       Policies:
@@ -125,15 +125,24 @@ Resources:
           - "@aws-sdk/client-apigatewaymanagementapi"
           - "@aws-lambda-powertools/batch"
 
-##########################################################################
-#                          Kinesis                                       #
-##########################################################################
-  BroadcastMessageStream:
-    Type: AWS::Kinesis::Stream
+  ##########################################################################
+  #                          SQS Queue                                     #
+  ##########################################################################
+  BroadcastMessageQueue:
+    Type: AWS::SQS::Queue
     Properties:
-      Name: BroadcastMessageStream
-      RetentionPeriodHours: 24
-      ShardCount: 1 
+      QueueName: BroadcastMessageQueue
+      ReceiveMessageWaitTimeSeconds: 3 # 3x the MaximumBatchingWindowInSeconds 
+      # DLQ
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt BroadcastMessageDLQ.Arn
+        maxReceiveCount: 3
+
+  BroadcastMessageDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: BroadcastMessageDLQ
+      MessageRetentionPeriod: 1209600 
 
   ##########################################################################
   #                          Outputs                                       #
@@ -151,6 +160,6 @@ Outputs:
     Description: ARN of the Broadcast Message Lambda Function
     Value: !GetAtt BroadcastMessageFunction.Arn
   
-  BroadcastMessageStreamName:
-    Description: Name of the Broadcast Message Kinesis Stream
-    Value: !Ref BroadcastMessageStream
+  BroadcastMessageQueueUrl:
+    Description: URL of the Broadcast Message SQS Queue
+    Value: !GetAtt BroadcastMessageQueue.QueueUrl
