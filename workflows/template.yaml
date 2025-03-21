@@ -70,12 +70,12 @@ Resources:
       DefinitionUri: ./statemachine/message-distribution.asl.json
       DefinitionSubstitutions:
         TableName: !Ref TableName
-        BroadcastMessageQueueUrl: !GetAtt BroadcastMessageQueue.QueueUrl
+        BroadcastMessageFunctionName: !Ref BroadcastMessageFunction
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref TableName
-        - SQSSendMessagePolicy:
-            QueueName: !GetAtt BroadcastMessageQueue.QueueName
+        - LambdaInvokePolicy:
+            FunctionName: !Ref BroadcastMessageFunction
         - CloudWatchLogsFullAccess
       Logging:
         Destinations:
@@ -94,15 +94,6 @@ Resources:
     Properties:
       Handler: broadcast-message-handler.broadcastMessageHandler
       FunctionName: BroadcastMessageFunction
-      Events:
-        Queue:
-          Type: SQS
-          Properties:
-            Queue: !GetAtt BroadcastMessageQueue.Arn
-            BatchSize: 10
-            MaximumBatchingWindowInSeconds: 1 
-            FunctionResponseTypes:
-              - ReportBatchItemFailures
       Policies:
         - AWSLambdaExecute
         - Statement:
@@ -123,26 +114,6 @@ Resources:
         External:
           - '@aws-lambda-powertools/logger'
           - "@aws-sdk/client-apigatewaymanagementapi"
-          - "@aws-lambda-powertools/batch"
-
-  ##########################################################################
-  #                          SQS Queue                                     #
-  ##########################################################################
-  BroadcastMessageQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: BroadcastMessageQueue
-      ReceiveMessageWaitTimeSeconds: 3 # 3x the MaximumBatchingWindowInSeconds 
-      # DLQ
-      RedrivePolicy:
-        deadLetterTargetArn: !GetAtt BroadcastMessageDLQ.Arn
-        maxReceiveCount: 3
-
-  BroadcastMessageDLQ:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: BroadcastMessageDLQ
-      MessageRetentionPeriod: 1209600 
 
   ##########################################################################
   #                          Outputs                                       #
@@ -159,7 +130,3 @@ Outputs:
   BroadcastMessageFunctionArn:
     Description: ARN of the Broadcast Message Lambda Function
     Value: !GetAtt BroadcastMessageFunction.Arn
-  
-  BroadcastMessageQueueUrl:
-    Description: URL of the Broadcast Message SQS Queue
-    Value: !GetAtt BroadcastMessageQueue.QueueUrl

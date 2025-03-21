@@ -134,10 +134,11 @@
           },
           "SendMessage": {
             "Type": "Task",
-            "Resource": "arn:aws:states:::sqs:sendMessage",
+            "Resource": "arn:aws:states:::lambda:invoke",
             "Parameters": {
-              "QueueUrl": "${BroadcastMessageQueueUrl}",
-              "MessageBody": {
+              "FunctionName": "${BroadcastMessageFunctionName}",
+              "InvocationType": "Event",
+              "Payload": {
                 "message.$": "$.prepareMessagePayload.messagePayload",
                 "connectionId.$": "$.prepareMessagePayload.connectionId"
               }
