@@ -18,6 +18,7 @@ Globals:
         TABLE_NAME: !Ref TableName
         EVENT_BUS_NAME: !Ref EventBusName
         WEBSOCKET_ENDPOINT: !Sub ${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Env}
+        AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
 
 Parameters:
   TableName:

@@ -65,13 +65,6 @@ Each component of the application has its own deployment process:
 ### Workflows
 - **Frontend**
 
-### Configuration
-The application has different configuration parameters for different environments. Key parameters include:
-- `Env`: Environment name (dev, prd)
-- `BucketName`: S3 bucket name for frontend assets
-- `TableName`: DynamoDB table name for connections and messages
-- `WebSocketHttpApiUrl`: API Gateway WebSocket API URL
-
 ## Local Development
 To run the application locally:
 1. Start the frontend development server.
