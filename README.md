@@ -27,6 +27,7 @@ The application is built using the following AWS services:
 
 ## Repository Structure
 
+```bash
 real-time-chat-demo/
 ├── front/                   # Frontend code
 │   ├── src/                 # Source code for the chat interface
@@ -36,7 +37,6 @@ real-time-chat-demo/
 │   └── deploy-frontend.sh   # Script to deploy frontend to S3
 ├── shared/                  # Shared resources across services
 │   ├── template.yaml        # CloudFormation template for shared resources
-│   └── deploy.sh            # Deployment script for shared resources
 ├── workflows/               # Step Functions workflows
 │   ├── template.yaml        # CloudFormation template for workflows
 │   ├── src/                 # Source code for Lambda functions
@@ -49,6 +49,7 @@ real-time-chat-demo/
 └── api/                     # API Gateway and connection management
     ├── template.yaml        # CloudFormation template for API
     └── src/                 # Lambda functions for API endpoints
+```
 
 ### Deployment
 Each component of the application has its own deployment process:
