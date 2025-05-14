@@ -69,10 +69,6 @@ Outputs:
     Value: !GetAtt Api.Outputs.WebSocketApiUrl
     Description: The URL of the WebSocket API endpoint.
 
-  WebSocketHttpApiUrl:
-    Value: !GetAtt Api.Outputs.WebSocketHttpApiUrl
-    Description: The URL of the WebSocket HTTP API endpoint.
-
   FrontendUrl:
     Value: !GetAtt SharedResources.Outputs.S3WebsiteURL
     Description: The URL of the frontend application.
