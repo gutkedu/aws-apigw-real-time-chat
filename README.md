@@ -1,90 +1,142 @@
 # Real-Time Chat Demo
+
 A serverless real-time chat application built with AWS serverless services.
 
-## Overview
-This demo showcases how to build a scalable, real-time chat application using AWS serverless technologies. The application uses WebSockets for real-time bi-directional communication, allowing users to exchange messages instantly without page refreshes.
+## Demo
+
+<p align="center">
+  <img src="docs/chat-gif.gif" alt="Demo Application" width="80%">
+</p>
 
 ## Architecture
+
 The application is built using the following AWS services:
 
-- **API Gateway (WebSocket API)**: Handles real-time WebSocket connections
+- **API Gateway WebSocket API**: Handles real-time WebSocket connections
+- **API Gateway REST API**: Provides HTTP endpoints for fetching message history
 - **Lambda**: Processes chat messages and connection events
 - **DynamoDB**: Stores connection information and message history
-- **Step Functions**: Orchestrates message delivery and workflow
-- **EventBridge**: Facilitates event-driven communication between components
+- **Step Functions**: Orchestrates message delivery workflow
+- **EventBridge**: Enables event-driven communication between components
 - **S3**: Hosts the frontend static assets
 
-![Architecture Diagram](www.google.com) TODO: Add architecture diagram
- 
+<p align="center">
+  <img src="docs/chat-stack.jpeg" alt="Architecture Diagram" width="50%">
+</p>
+
 ## Features
-- Real-time message delivery via WebSockets
-- Message persistence with DynamoDB
-- User presence indicators (online/offline status)
-- Message history loading
-- Serverless architecture with pay-per-use pricing
-- Client-side message filtering to avoid duplicate messages
-- Responsive and lightweight frontend
+
+- **Real-time Communication**: Instant message delivery via WebSockets
+- **Message Persistence**: Complete message history stored in DynamoDB
+- **User Presence**: Online/offline status indicators
+- **Message History**: Load and display previous messages
+- **Serverless Architecture**: Fully serverless with pay-per-use pricing
+- **High Scalability**: Scales automatically to handle traffic spikes
+- **Fault Tolerance**: Built-in error handling and retry mechanisms
+- **Client-side Deduplication**: Prevents duplicate message display
+- **Responsive Design**: Works on desktop and mobile devices
 
 ## Repository Structure
 
 ```bash
 real-time-chat-demo/
+├── api/                     # API Gateway and connection management
+│   ├── template.yaml        # CloudFormation template for API
+│   └── src/                 # Lambda functions for API endpoints
+│       ├── aws-clients/     # AWS SDK client configurations
+│       ├── entities/        # Domain entities (Connection, Message)
+│       ├── fastify/         # REST API using Fastify framework
+│       ├── functions/       # WebSocket handlers (connect, disconnect, send)
+│       ├── lambdas/         # Lambda function entry points
+│       └── shared/          # Shared utilities and helpers
+├── db/                      # Database resources
+│   └── template.yaml        # CloudFormation template for DynamoDB
+├── docs/                    # Documentation assets
+│   └── architecture-diagram.png # Architecture diagram
 ├── front/                   # Frontend code
 │   ├── src/                 # Source code for the chat interface
 │   │   ├── index.html       # Main HTML file
 │   │   ├── style.css        # Styling for the chat interface
 │   │   └── app.mjs          # JavaScript for WebSocket communication
 │   └── deploy-frontend.sh   # Script to deploy frontend to S3
-├── shared/                  # Shared resources across services
-│   ├── template.yaml        # CloudFormation template for shared resources
+├── shared/                  # Shared infrastructure resources
+│   └── template.yaml        # CloudFormation template for shared resources
 ├── workflows/               # Step Functions workflows
 │   ├── template.yaml        # CloudFormation template for workflows
 │   ├── src/                 # Source code for Lambda functions
+│   │   ├── aws-clients/     # AWS SDK client configurations
 │   │   ├── lambdas/         # Lambda function handlers
-│   │   │   └── broadcast-message-handler.ts   # Message broadcast handler
-│   │   ├── shared/          # Shared utilities
-│   │   └── aws-clients/     # AWS SDK client configuration
+│   │   └── shared/          # Shared utilities
 │   └── statemachine/        # Step Functions state machine definitions
-│       └── message-distribution.asl.json    # Message distribution state machine
-└── api/                     # API Gateway and connection management
-    ├── template.yaml        # CloudFormation template for API
-    └── src/                 # Lambda functions for API endpoints
+│       └── message-distribution.asl.json    # Message distribution workflow
+└── template.yaml            # Main CloudFormation template
 ```
 
-### Deployment
-Each component of the application has its own deployment process:
+## Deployment
 
 ### Prerequisites
+
 - AWS CLI installed and configured
 - Node.js 16+ and npm
 - AWS SAM CLI (for deploying serverless applications)
+- TypeScript knowledge for backend customization
 
-### Shared Resources
-- **API Gateway and Connection Management**
+### Deployment Steps
 
-### Workflows
-- **Frontend**
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/yourusername/aws-apigw-real-time-chat.git
+   cd aws-apigw-real-time-chat
+   ```
 
-## Local Development
-To run the application locally:
-1. Start the frontend development server.
-2. Use a WebSocket emulator or deploy the backend to AWS and connect to it from the local frontend.
+2. **Install dependencies**:
+   ```bash
+   cd api/src && npm install
+   cd ../../workflows/src && npm install
+   ```
+
+3. **Deploy the application stack**:
+   ```bash
+   sam build
+   sam deploy --guided
+   ```
+
+4. **Deploy the frontend**:
+   ```bash
+   bash front/scripts/deploy.sh
+   ```
+
+## Architecture Deep Dive
+
+The application follows an event-driven architecture with these main components:
+
+1. **Connection Management**:
+   - API Gateway WebSocket API handles client connections
+   - Connection information stored in DynamoDB
+
+2. **Message Processing**:
+   - Messages sent via WebSocket are processed by a Lambda
+   - EventBridge routes messages to appropriate workflows
+
+3. **Message Distribution**:
+   - Step Functions workflow coordinates message delivery
+   - Lambda functions send messages to connected clients
+
+4. **Message History**:
+   - REST API provides endpoints to fetch message history
+   - DynamoDB stores all messages with TTL for cleanup
 
 ## Performance Optimization
-The application is optimized for real-time performance:
-- Direct Lambda invocation for message delivery instead of SQS for lower latency
-- Client-side message handling to prevent duplicate message display
+
+- Direct Lambda invocation for message delivery (lower latency than SQS)
+- Client-side message handling to prevent duplicate messages
 - Efficient WebSocket message format to minimize payload size
+- Connection cleanup to handle stale connections
 
-## Contributing
-Contributions are welcome! Please feel free to submit a Pull Request.
+## Security Considerations
 
-## License
-This project is licensed under the MIT License - see the LICENSE file for details.
+- Connections expire after 2 hours (API Gateway WebSocket limit)
+- Messages stored with TTL to auto-expire old data
+- IAM roles with least privileges for Lambda functions
+- No personal data stored beyond session information
 
-## Acknowledgements
-- AWS for their serverless services
-- The open-source community for inspiration and tools
-
-## Contact
-For questions or feedback, please open an issue in this repository.
