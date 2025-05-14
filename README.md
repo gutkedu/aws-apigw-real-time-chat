@@ -21,7 +21,7 @@ The application is built using the following AWS services:
 - **S3**: Hosts the frontend static assets
 
 <p align="center">
-  <img src="docs/chat-stack.jpeg" alt="Architecture Diagram" width="50%">
+  <img src="docs/chat-stack.png" alt="Architecture Diagram" width="50%">
 </p>
 
 ## Features
