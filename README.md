@@ -101,6 +101,12 @@ real-time-chat-demo/
    sam deploy --guided
    ```
 
+4 - Save the websocket url (wss://) and the API Gateway endpoint and add to the variables in the `front/src/app.mjs` file.
+   ```bash
+   export WEBSOCKET_URL=wss://your-websocket-url
+   export API_ENDPOINT=https://your-api-endpoint
+   ```
+
 4. **Deploy the frontend**:
    ```bash
    bash front/scripts/deploy.sh
