@@ -107,7 +107,12 @@ real-time-chat-demo/
    export API_ENDPOINT=https://your-api-endpoint
    ```
 
-4. **Deploy the frontend**:
+5 - Access the frontend deploy script (`front/scripts/deploy.sh`) and change the aws profile constant to your aws profile
+   ```bash
+   PROFILE="{{your-profile}}"
+   ```
+
+6 - **Deploy the frontend**:
    ```bash
    bash front/scripts/deploy.sh
    ```
